@@ -72,4 +72,8 @@ public class BufferPool {
     public void addPage(Page page) {
         cache.put(page.getPageId(), page);
     }
+
+    public int getLoadedPageCount() {
+        return cache.size();
+    }
 }
