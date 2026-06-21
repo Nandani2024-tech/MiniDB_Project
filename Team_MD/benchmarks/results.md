@@ -4,16 +4,16 @@
 
 | Table Size (Rows) | SeqScan Latency (ns) | IndexScan Latency (ns) | Speedup |
 |-------------------|----------------------|------------------------|---------|
-| 100 | 275,500 | 29,340 | 9.39x |
-| 1000 | 914,080 | 32,860 | 27.82x |
-| 10000 | 6,708,290 | 30,220 | 221.98x |
+| 100 | 259,300 | 24,700 | 10.50x |
+| 1000 | 855,660 | 25,430 | 33.65x |
+| 10000 | 6,561,560 | 27,060 | 242.48x |
 
 ## 2. MVCC Read Throughput & Non-Blocking Readers
 
 Ran 10 concurrent readers alongside 1 writer (which slept for 200ms).
 
-- **Total Table Scans Completed**: 201
-- **Throughput**: 397.23 scans/sec
+- **Total Table Scans Completed**: 193
+- **Throughput**: 381.42 scans/sec
 - **Max Reader Latency**: 38 ms
 
 *(Since max reader latency is well under 200ms, readers were **not** blocked by the active writer).*
@@ -22,8 +22,8 @@ Ran 10 concurrent readers alongside 1 writer (which slept for 200ms).
 
 | Mode | Time per Commit (ms) | Time per Commit (ns) |
 |------|----------------------|----------------------|
-| `fsync()` Enabled (Safe) | 0.7016 | 701,584 |
-| `fsync()` Disabled (Fast) | 0.0025 | 2,509 |
+| `fsync()` Enabled (Safe) | 0.8251 | 825,073 |
+| `fsync()` Disabled (Fast) | 0.0027 | 2,658 |
 
 *(Synchronous disk writes add significant latency, demonstrating the durability vs performance trade-off).*
 
