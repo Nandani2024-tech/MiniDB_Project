@@ -1,9 +1,7 @@
+*.db
+*.wal
+*.log
 target/
 .idea/
-*.iml
-*.class
-.classpath
-.project
-.settings/
-*.log
-bin/
+.vscode/
+.DS_Store

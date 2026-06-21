@@ -84,3 +84,17 @@ To run the standalone benchmark suite and generate metrics:
 ```bash
 mvn test-compile exec:java "-Dexec.mainClass=com.minidb.benchmarks.BenchmarkSuite" "-Dexec.classpathScope=test"
 ```
+
+To run the **Interactive MiniDB Shell** (REPL) for live demos:
+```bash
+mvn exec:java "-Dexec.mainClass=com.minidb.Shell"
+```
+
+## 13. Interactive Demo (Live Viva Guide)
+The system includes a premium Interactive Shell (`com.minidb.Shell`) designed for the final demonstration. 
+
+### Key Shell Features:
+- **Transaction Controls**: Use `.begin` and `.commit` to manually demonstrate WAL and Log persistence.
+- **MVCC Transparency**: Points out `XMIN` and `XMAX` metadata for every row, allowing you to explain snapshot isolation live.
+- **Real-time Logging**: Displays the exact moment a logical Log Record is flushed to the WAL during an `INSERT`.
+- **Auto-Recovery Proof**: Upon startup, the shell replays any uncommitted WAL fragments to prove crash-consistency.
