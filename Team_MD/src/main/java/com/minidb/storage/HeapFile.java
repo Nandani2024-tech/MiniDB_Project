@@ -1,5 +1,6 @@
 package com.minidb.storage;
 
+import com.minidb.recovery.WALManager;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -14,10 +15,17 @@ public class HeapFile {
     private final PageManager pageManager;
     private final List<ColumnType> schema;
 
+    private final WALManager walManager;
+
     public HeapFile(BufferPool bufferPool, PageManager pageManager, List<ColumnType> schema) {
+        this(bufferPool, pageManager, schema, null);
+    }
+
+    public HeapFile(BufferPool bufferPool, PageManager pageManager, List<ColumnType> schema, WALManager walManager) {
         this.bufferPool = bufferPool;
         this.pageManager = pageManager;
         this.schema = schema;
+        this.walManager = walManager;
     }
 
     /**
@@ -34,9 +42,17 @@ public class HeapFile {
         // Scan existing pages for space
         for (int i = 0; i < numPages; i++) {
             Page page = bufferPool.getPage(i);
-            slotNumber = page.insertRow(rowBytes);
-            if (slotNumber != -1) {
+            if (page.getFreeSpace() >= Page.SLOT_SIZE + rowBytes.length) {
                 targetPage = page;
+                slotNumber = page.insertRow(rowBytes);
+                
+                // Log INSERT after slot is known but image already final
+                if (walManager != null) {
+                    com.minidb.recovery.LogRecord record = new com.minidb.recovery.LogRecord(
+                            row.getXmin(), targetPage.getPageId(), slotNumber, null, rowBytes,
+                            com.minidb.recovery.LogRecord.Type.INSERT);
+                    walManager.appendLogRecord(record);
+                }
                 break;
             }
         }
@@ -46,6 +62,14 @@ public class HeapFile {
             targetPage = pageManager.allocatePage();
             bufferPool.addPage(targetPage);
             slotNumber = targetPage.insertRow(rowBytes);
+            
+            // Log INSERT after slot is known
+            if (walManager != null) {
+                com.minidb.recovery.LogRecord record = new com.minidb.recovery.LogRecord(
+                        row.getXmin(), targetPage.getPageId(), slotNumber, null, rowBytes,
+                        com.minidb.recovery.LogRecord.Type.INSERT);
+                walManager.appendLogRecord(record);
+            }
         }
 
         bufferPool.markDirty(targetPage.getPageId());
@@ -61,6 +85,15 @@ public class HeapFile {
 
     public void delete(RowId rowId) throws IOException {
         Page page = bufferPool.getPage(rowId.pageId());
+        
+        if (walManager != null) {
+            byte[] oldBytes = page.getRow(rowId.slotNumber());
+            com.minidb.recovery.LogRecord record = new com.minidb.recovery.LogRecord(
+                    0L, rowId.pageId(), rowId.slotNumber(), oldBytes, null,
+                    com.minidb.recovery.LogRecord.Type.DELETE);
+            walManager.appendLogRecord(record);
+        }
+        
         page.deleteRow(rowId.slotNumber());
         bufferPool.markDirty(rowId.pageId());
     }
@@ -95,5 +128,65 @@ public class HeapFile {
             }
         }
         return results;
+    }
+
+    public void update(RowId rowId, Row row) throws IOException {
+        Page page = bufferPool.getPage(rowId.pageId());
+        byte[] rowBytes = Row.serialize(row, schema);
+        
+        if (walManager != null) {
+            byte[] oldBytes = page.getRow(rowId.slotNumber());
+            com.minidb.recovery.LogRecord record = new com.minidb.recovery.LogRecord(
+                    row.getXmax(), rowId.pageId(), rowId.slotNumber(), oldBytes, rowBytes,
+                    com.minidb.recovery.LogRecord.Type.UPDATE);
+            walManager.appendLogRecord(record);
+        }
+        
+        if (!page.updateRow(rowId.slotNumber(), rowBytes)) {
+            throw new IOException("In-place update failed. Row sizes must match exactly.");
+        }
+        bufferPool.markDirty(rowId.pageId());
+    }
+
+    public java.util.Iterator<Row> iterator() {
+        return new java.util.Iterator<Row>() {
+            private int currentPageId = 0;
+            private int currentSlot = 0;
+            private Row nextRow = null;
+
+            @Override
+            public boolean hasNext() {
+                if (nextRow != null) return true;
+                try {
+                    int numPages = pageManager.getNumPages();
+                    while (currentPageId < numPages) {
+                        Page page = bufferPool.getPage(currentPageId);
+                        while (currentSlot < page.getSlotCount()) {
+                            byte[] bytes = page.getRow(currentSlot);
+                            if (bytes != null) {
+                                nextRow = Row.deserialize(bytes, schema);
+                                nextRow.setRowId(new RowId(currentPageId, currentSlot));
+                                currentSlot++;
+                                return true;
+                            }
+                            currentSlot++;
+                        }
+                        currentPageId++;
+                        currentSlot = 0;
+                    }
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                return false;
+            }
+
+            @Override
+            public Row next() {
+                if (!hasNext()) throw new java.util.NoSuchElementException();
+                Row row = nextRow;
+                nextRow = null;
+                return row;
+            }
+        };
     }
 }

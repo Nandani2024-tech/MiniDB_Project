@@ -92,4 +92,54 @@ public class BTreeIndexTest {
             index2.close();
         }
     }
+
+    @Test
+    public void testDeleteAndUnderflow() throws IOException {
+        BTreeIndex index = new BTreeIndex(INDEX_FILE);
+        try {
+            // Insert 30 keys. With MAX_KEYS=10, this creates a root and multiple leaf nodes.
+            for (int i = 0; i < 30; i++) {
+                index.insert(i, new RowId(3, i));
+            }
+            
+            // Delete enough keys to force leaf and potentially internal node underflows.
+            // We delete 15 keys (e.g. from the middle)
+            for (int i = 10; i < 25; i++) {
+                index.delete(i);
+            }
+            
+            // Verify deleted keys are gone
+            for (int i = 10; i < 25; i++) {
+                List<RowId> result = index.search(i);
+                assertTrue(result.isEmpty(), "Key " + i + " should have been deleted");
+            }
+            
+            // Verify remaining keys are still intact and correctly routed
+            for (int i = 0; i < 10; i++) {
+                List<RowId> result = index.search(i);
+                assertEquals(1, result.size());
+                assertEquals(i, result.get(0).slotNumber());
+            }
+            for (int i = 25; i < 30; i++) {
+                List<RowId> result = index.search(i);
+                assertEquals(1, result.size());
+                assertEquals(i, result.get(0).slotNumber());
+            }
+            
+            // Delete more to potentially trigger root collapse
+            for (int i = 0; i < 10; i++) {
+                index.delete(i);
+            }
+            for (int i = 0; i < 10; i++) {
+                assertTrue(index.search(i).isEmpty());
+            }
+            for (int i = 25; i < 30; i++) {
+                List<RowId> result = index.search(i);
+                assertEquals(1, result.size());
+                assertEquals(i, result.get(0).slotNumber());
+            }
+        } finally {
+            index.close();
+        }
+    }
 }

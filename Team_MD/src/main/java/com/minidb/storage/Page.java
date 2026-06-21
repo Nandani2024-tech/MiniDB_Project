@@ -104,6 +104,41 @@ public class Page {
         }
     }
 
+    public boolean updateRow(int slotNumber, byte[] newBytes) {
+        if (slotNumber >= slotCount) return false;
+        int offset = getSlotOffset(slotNumber);
+        int length = getSlotLength(slotNumber);
+        if (length == -1 || length != newBytes.length) {
+            return false; // Can only do in-place updates of exact same length
+        }
+        System.arraycopy(newBytes, 0, data, offset, length);
+        return true;
+    }
+
+    /**
+     * Restores a previously-deleted slot with the given bytes (used by undo phase).
+     * Returns true if the slot was found and restored; false if slot doesn't exist.
+     */
+    public boolean restoreRow(int slotNumber, byte[] rowBytes) {
+        if (slotNumber >= slotCount) return false;
+        int length = getSlotLength(slotNumber);
+        if (length != -1) {
+            // Slot already live — overwrite in place if same length
+            if (length == rowBytes.length) {
+                int offset = getSlotOffset(slotNumber);
+                System.arraycopy(rowBytes, 0, data, offset, rowBytes.length);
+                return true;
+            }
+            return false;
+        }
+        // Slot is deleted (-1): re-use its space if we can write at the current freeSpacePointer
+        freeSpacePointer -= rowBytes.length;
+        System.arraycopy(rowBytes, 0, data, freeSpacePointer, rowBytes.length);
+        setSlot(slotNumber, freeSpacePointer, rowBytes.length);
+        updateHeader();
+        return true;
+    }
+
     public int getFreeSpace() {
         // Space between end of slot directory and start of data
         return freeSpacePointer - (HEADER_SIZE + (slotCount * SLOT_SIZE));

@@ -9,6 +9,9 @@ import java.util.List;
  */
 public class Row {
     private final Object[] values;
+    private long xmin = 0;
+    private long xmax = 0;
+    private transient RowId rowId;
 
     public Row(Object[] values) {
         this.values = values;
@@ -26,10 +29,20 @@ public class Row {
         return values[index];
     }
 
+    public long getXmin() { return xmin; }
+    public void setXmin(long xmin) { this.xmin = xmin; }
+
+    public long getXmax() { return xmax; }
+    public void setXmax(long xmax) { this.xmax = xmax; }
+
+    public RowId getRowId() { return rowId; }
+    public void setRowId(RowId rowId) { this.rowId = rowId; }
+
     /**
      * Serializes a row's typed values into a byte array.
      * INT: 4 bytes
      * VARCHAR: 4-byte length + UTF-8 bytes
+     * MVCC: 16 bytes at the end (8 for xmin, 8 for xmax)
      */
     public static byte[] serialize(Row row, List<ColumnType> schema) {
         int estimatedSize = 0;
@@ -41,6 +54,8 @@ public class Row {
                 estimatedSize += 4 + s.getBytes(StandardCharsets.UTF_8).length;
             }
         }
+        
+        estimatedSize += 16; // 8 bytes for xmin, 8 for xmax
 
         ByteBuffer buffer = ByteBuffer.allocate(estimatedSize);
         for (int i = 0; i < schema.size(); i++) {
@@ -52,6 +67,10 @@ public class Row {
                 buffer.put(stringBytes);
             }
         }
+        
+        buffer.putLong(row.xmin);
+        buffer.putLong(row.xmax);
+        
         return buffer.array();
     }
 
@@ -71,7 +90,16 @@ public class Row {
                 values[i] = new String(stringBytes, StandardCharsets.UTF_8);
             }
         }
-        return new Row(values);
+        
+        Row row = new Row(values);
+        
+        // Backward compatibility: read xmin/xmax only if present
+        if (buffer.remaining() >= 16) {
+            row.xmin = buffer.getLong();
+            row.xmax = buffer.getLong();
+        }
+        
+        return row;
     }
 
     @Override
@@ -81,7 +109,7 @@ public class Row {
             sb.append(values[i]);
             if (i < values.length - 1) sb.append(", ");
         }
-        sb.append("}");
+        sb.append("} [xmin=").append(xmin).append(", xmax=").append(xmax).append("]");
         return sb.toString();
     }
 
