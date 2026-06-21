@@ -10,11 +10,11 @@ public class DBViewer {
         
         try {
             PageManager pm = new PageManager(dbPath);
-            BufferPool bp = new BufferPool(pm, 10);
+            BufferPool bp = new BufferPool(pm, 10, null);
             
             // Assuming the schema is INT, VARCHAR as in the integration tests
             List<ColumnType> schema = List.of(ColumnType.INT, ColumnType.VARCHAR);
-            HeapFile hf = new HeapFile(bp, pm, schema);
+            HeapFile hf = new HeapFile(bp, pm, schema, null);
             
             List<Row> rows = hf.scan();
             System.out.println("--- Database Contents ---");

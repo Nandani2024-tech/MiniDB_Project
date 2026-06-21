@@ -146,7 +146,185 @@ public class BTreeIndex {
     }
 
     public void delete(int key) {
-        // Deletion omitted for simplicity in Phase 2
+        try {
+            if (metadata.getRootNodeId() == -1) return;
+            BTreeNode root = loadNode(metadata.getRootNodeId());
+            deleteRecursive(null, -1, root, key);
+            
+            // If root became empty
+            if (root.getNumKeys() == 0) {
+                if (!root.isLeaf()) {
+                    // Root is internal and empty, its only child becomes the new root
+                    metadata.setRootNodeId(root.getChildPointers().get(0));
+                    saveMetadata();
+                } else {
+                    // Root is leaf and empty, tree is empty
+                    metadata.setRootNodeId(-1);
+                    saveMetadata();
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete", e);
+        }
+    }
+
+    private void deleteRecursive(BTreeNode parent, int childIndex, BTreeNode current, int key) {
+        if (current.isLeaf()) {
+            boolean modified = false;
+            // Remove all matching keys from the leaf node
+            for (int i = current.getNumKeys() - 1; i >= 0; i--) {
+                if (current.getKeys().get(i) == key) {
+                    current.getKeys().remove(i);
+                    current.getLeafValues().remove(i);
+                    modified = true;
+                }
+            }
+            if (modified) {
+                setNumKeys(current, current.getKeys().size());
+                saveNode(current);
+            }
+        } else {
+            int idx = current.findKeyIndex(key);
+            if (idx < current.getNumKeys() && current.getKeys().get(idx) == key) {
+                idx++;
+            }
+            
+            BTreeNode child = loadNode(current.getChildPointers().get(idx));
+            deleteRecursive(current, idx, child, key);
+            
+            if (child.getNumKeys() < BTreeNode.MAX_KEYS / 2) {
+                handleUnderflow(current, idx, child);
+            }
+        }
+    }
+
+    private void handleUnderflow(BTreeNode parent, int childIndex, BTreeNode child) {
+        int MIN_KEYS = BTreeNode.MAX_KEYS / 2;
+        if (child.getNumKeys() >= MIN_KEYS) return;
+
+        // Try borrow from left sibling
+        if (childIndex > 0) {
+            BTreeNode leftSibling = loadNode(parent.getChildPointers().get(childIndex - 1));
+            if (leftSibling.getNumKeys() > MIN_KEYS) {
+                borrowFromLeft(parent, childIndex, leftSibling, child);
+                return;
+            }
+        }
+
+        // Try borrow from right sibling
+        if (childIndex < parent.getNumKeys()) {
+            BTreeNode rightSibling = loadNode(parent.getChildPointers().get(childIndex + 1));
+            if (rightSibling.getNumKeys() > MIN_KEYS) {
+                borrowFromRight(parent, childIndex, child, rightSibling);
+                return;
+            }
+        }
+
+        // If borrow fails, merge.
+        if (childIndex > 0) {
+            BTreeNode leftSibling = loadNode(parent.getChildPointers().get(childIndex - 1));
+            mergeNodes(parent, childIndex - 1, leftSibling, child);
+        } else if (childIndex < parent.getNumKeys()) {
+            BTreeNode rightSibling = loadNode(parent.getChildPointers().get(childIndex + 1));
+            mergeNodes(parent, childIndex, child, rightSibling);
+        }
+    }
+
+    private void borrowFromLeft(BTreeNode parent, int childIndex, BTreeNode left, BTreeNode child) {
+        if (child.isLeaf()) {
+            int lastIdx = left.getNumKeys() - 1;
+            int k = left.getKeys().remove(lastIdx);
+            RowId v = left.getLeafValues().remove(lastIdx);
+            setNumKeys(left, left.getNumKeys() - 1);
+            
+            child.getKeys().add(0, k);
+            child.getLeafValues().add(0, v);
+            setNumKeys(child, child.getNumKeys() + 1);
+            
+            parent.getKeys().set(childIndex - 1, child.getKeys().get(0));
+            
+            saveNode(left); saveNode(child); saveNode(parent);
+        } else {
+            int lastIdx = left.getNumKeys() - 1;
+            int k = left.getKeys().remove(lastIdx);
+            int ptr = left.getChildPointers().remove(lastIdx + 1);
+            setNumKeys(left, left.getNumKeys() - 1);
+            
+            int parentKey = parent.getKeys().get(childIndex - 1);
+            parent.getKeys().set(childIndex - 1, k);
+            
+            child.getKeys().add(0, parentKey);
+            child.getChildPointers().add(0, ptr);
+            setNumKeys(child, child.getNumKeys() + 1);
+            
+            saveNode(left); saveNode(child); saveNode(parent);
+        }
+    }
+
+    private void borrowFromRight(BTreeNode parent, int childIndex, BTreeNode child, BTreeNode right) {
+        if (child.isLeaf()) {
+            int k = right.getKeys().remove(0);
+            RowId v = right.getLeafValues().remove(0);
+            setNumKeys(right, right.getNumKeys() - 1);
+            
+            child.getKeys().add(k);
+            child.getLeafValues().add(v);
+            setNumKeys(child, child.getNumKeys() + 1);
+            
+            parent.getKeys().set(childIndex, right.getKeys().get(0));
+            
+            saveNode(right); saveNode(child); saveNode(parent);
+        } else {
+            int k = right.getKeys().remove(0);
+            int ptr = right.getChildPointers().remove(0);
+            setNumKeys(right, right.getNumKeys() - 1);
+            
+            int parentKey = parent.getKeys().get(childIndex);
+            parent.getKeys().set(childIndex, k);
+            
+            child.getKeys().add(parentKey);
+            child.getChildPointers().add(ptr);
+            setNumKeys(child, child.getNumKeys() + 1);
+            
+            saveNode(right); saveNode(child); saveNode(parent);
+        }
+    }
+
+    private void mergeNodes(BTreeNode parent, int leftIndex, BTreeNode left, BTreeNode right) {
+        if (left.isLeaf()) {
+            left.getKeys().addAll(right.getKeys());
+            left.getLeafValues().addAll(right.getLeafValues());
+            setNumKeys(left, left.getNumKeys() + right.getNumKeys());
+            
+            left.setNextLeafId(right.getNextLeafId());
+            
+            parent.getKeys().remove(leftIndex);
+            parent.getChildPointers().remove(leftIndex + 1);
+            setNumKeys(parent, parent.getNumKeys() - 1);
+            
+            saveNode(left); saveNode(parent);
+        } else {
+            int parentKey = parent.getKeys().remove(leftIndex);
+            parent.getChildPointers().remove(leftIndex + 1);
+            setNumKeys(parent, parent.getNumKeys() - 1);
+            
+            left.getKeys().add(parentKey);
+            left.getKeys().addAll(right.getKeys());
+            left.getChildPointers().addAll(right.getChildPointers());
+            setNumKeys(left, left.getNumKeys() + 1 + right.getNumKeys());
+            
+            saveNode(left); saveNode(parent);
+        }
+    }
+
+    private void setNumKeys(BTreeNode node, int numKeys) {
+        try {
+            java.lang.reflect.Field field = BTreeNode.class.getDeclaredField("numKeys");
+            field.setAccessible(true);
+            field.set(node, numKeys);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update numKeys via reflection", e);
+        }
     }
 
     public void close() throws IOException {

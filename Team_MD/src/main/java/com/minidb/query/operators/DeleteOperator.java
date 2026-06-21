@@ -14,9 +14,16 @@ public class DeleteOperator implements Operator {
     private int deleteCount = 0;
     private boolean executed = false;
 
+    private com.minidb.txn.TransactionManager txnManager;
+
     public DeleteOperator(HeapFile heapFile, Operator child) {
+        this(heapFile, child, null);
+    }
+
+    public DeleteOperator(HeapFile heapFile, Operator child, com.minidb.txn.TransactionManager txnManager) {
         this.heapFile = heapFile;
         this.child = child;
+        this.txnManager = txnManager;
     }
 
     @Override
@@ -32,10 +39,16 @@ public class DeleteOperator implements Operator {
 
         Row row;
         while ((row = child.next()) != null) {
-            // Note: In a real system, the child needs to return a RowId for deletion.
-            // Since Operator interface returns Row, we need a way to find RowId.
-            // For now, assume this is handled or we scan to find it.
-            // Since this is Phase 3, we just pass the count.
+            com.minidb.txn.Transaction txn = txnManager != null ? txnManager.getCurrent() : null;
+            if (row.getRowId() != null) {
+                if (txn != null) {
+                    row.setXmax(txn.getId());
+                    heapFile.update(row.getRowId(), row);
+                    txn.addWrite(row.getRowId());
+                } else {
+                    heapFile.delete(row.getRowId()); // Fallback for non-transactional phase 2 tests
+                }
+            }
             deleteCount++;
         }
         executed = true;

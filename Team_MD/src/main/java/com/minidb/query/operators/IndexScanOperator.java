@@ -15,10 +15,17 @@ public class IndexScanOperator implements Operator {
     private int searchKey;
     private Iterator<RowId> resultIterator;
 
+    private com.minidb.txn.TransactionManager txnManager;
+
     public IndexScanOperator(BTreeIndex index, HeapFile heapFile, int searchKey) {
+        this(index, heapFile, searchKey, null);
+    }
+
+    public IndexScanOperator(BTreeIndex index, HeapFile heapFile, int searchKey, com.minidb.txn.TransactionManager txnManager) {
         this.index = index;
         this.heapFile = heapFile;
         this.searchKey = searchKey;
+        this.txnManager = txnManager;
     }
 
     @Override
@@ -29,9 +36,18 @@ public class IndexScanOperator implements Operator {
 
     @Override
     public Row next() throws Exception {
-        if (resultIterator != null && resultIterator.hasNext()) {
-            RowId rid = resultIterator.next();
-            return heapFile.get(rid);
+        if (resultIterator != null) {
+            while (resultIterator.hasNext()) {
+                RowId rid = resultIterator.next();
+                Row row = heapFile.get(rid);
+                if (row != null) {
+                    row.setRowId(rid);
+                    com.minidb.txn.Transaction txn = txnManager != null ? txnManager.getCurrent() : null;
+                    if (com.minidb.txn.VisibilityRules.isVisible(row, txn, txnManager)) {
+                        return row;
+                    }
+                }
+            }
         }
         return null;
     }

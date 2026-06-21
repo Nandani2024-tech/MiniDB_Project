@@ -13,9 +13,16 @@ public class InsertOperator implements Operator {
     private int insertCount = 0;
     private boolean executed = false;
 
+    private com.minidb.txn.TransactionManager txnManager;
+
     public InsertOperator(HeapFile heapFile, List<Row> rowsToInsert) {
+        this(heapFile, rowsToInsert, null);
+    }
+
+    public InsertOperator(HeapFile heapFile, List<Row> rowsToInsert, com.minidb.txn.TransactionManager txnManager) {
         this.heapFile = heapFile;
         this.rowsToInsert = rowsToInsert.iterator();
+        this.txnManager = txnManager;
     }
 
     @Override
@@ -29,7 +36,16 @@ public class InsertOperator implements Operator {
         if (executed) return null;
 
         while (rowsToInsert.hasNext()) {
-            heapFile.insert(rowsToInsert.next());
+            Row row = rowsToInsert.next();
+            com.minidb.txn.Transaction txn = txnManager != null ? txnManager.getCurrent() : null;
+            if (txn != null) {
+                row.setXmin(txn.getId());
+                row.setXmax(0);
+            }
+            com.minidb.storage.RowId id = heapFile.insert(row);
+            if (txn != null) {
+                txn.addWrite(id);
+            }
             insertCount++;
         }
         executed = true;

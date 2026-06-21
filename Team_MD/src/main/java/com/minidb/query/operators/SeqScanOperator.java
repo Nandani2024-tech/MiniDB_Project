@@ -11,20 +11,32 @@ public class SeqScanOperator implements Operator {
     private HeapFile heapFile;
     private Iterator<Row> rowIterator;
 
+    private com.minidb.txn.TransactionManager txnManager;
+
     public SeqScanOperator(HeapFile heapFile) {
+        this(heapFile, null);
+    }
+
+    public SeqScanOperator(HeapFile heapFile, com.minidb.txn.TransactionManager txnManager) {
         this.heapFile = heapFile;
+        this.txnManager = txnManager;
     }
 
     @Override
     public void open() throws Exception {
-        List<Row> rows = heapFile.scan();
-        rowIterator = rows.iterator();
+        rowIterator = heapFile.iterator();
     }
 
     @Override
     public Row next() throws Exception {
-        if (rowIterator != null && rowIterator.hasNext()) {
-            return rowIterator.next();
+        if (rowIterator != null) {
+            while (rowIterator.hasNext()) {
+                Row row = rowIterator.next();
+                com.minidb.txn.Transaction txn = txnManager != null ? txnManager.getCurrent() : null;
+                if (com.minidb.txn.VisibilityRules.isVisible(row, txn, txnManager)) {
+                    return row;
+                }
+            }
         }
         return null;
     }
