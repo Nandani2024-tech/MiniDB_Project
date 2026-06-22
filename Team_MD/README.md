@@ -5,6 +5,44 @@ MiniDB is a lightweight, relational database management system built from scratc
 
 This project strictly avoids third-party database libraries, implementing these fundamentals directly on the JVM.
 
+## Project Overview
+MiniDB is solving the challenge of understanding complex database internals by building a relational DBMS entirely from scratch to demonstrate core database operations.
+
+**Goals:**
+*   **Storage:** Implement disk-oriented storage with a slotted-page architecture.
+*   **Indexing:** Build a persistent B+ Tree to accelerate point lookups and range scans.
+*   **Transactions:** Support Multi-Version Concurrency Control (MVCC) for high-throughput, non-blocking reads.
+*   **Recovery:** Ensure durability and crash recovery through Write-Ahead Logging (WAL).
+
+**Chosen Extension Track:** Track B — Concurrency (MVCC). This track was chosen to explore the intricacies of snapshot isolation and the mechanics of managing multiple data versions without read locks.
+
+## Team Information
+| Name | Roll Number | Email |
+|------|-------------|-------|
+| Ayush Kumar Patra | 24bcs10474 | ayush.24bcs10474@sst.scaler.com|
+| Nandani Kumari | 24bcs10317 | nandani.24bcs10317@sst.scaler.com |
+| Vishudh Goyal | 24bcs10446 | vishudh.24bcs10446@sst.scaler.com |
+
+## System Architecture
+```mermaid
+flowchart TD
+    SQL[SQL input] --> Shell[Shell/REPL]
+    Shell --> QO[Query Optimizer]
+    QO --> Ops[Operators: SeqScan / IndexScan / Filter / Join / Project / Insert / Delete]
+    Ops --> TM[TransactionManager MVCC]
+    TM --> BP[BufferPool LRU]
+    BP --> WAL[WALManager]
+    BP --> PM[PageManager]
+    WAL --> DiskWAL[disk .wal file]
+    PM --> DiskDB[disk .db file]
+    
+    Startup[Startup] --> RM[RecoveryManager]
+    RM -- reads --> DiskWAL
+    RM -- applies redo/undo --> BP
+```
+
+The data flow starts with SQL input entering the Shell/REPL, which invokes the Query Optimizer to generate an execution plan. The generated Operators execute the query by interfacing with the TransactionManager, which enforces MVCC before requesting data from the BufferPool. The BufferPool handles caching (LRU) and persists data by routing log records to the WALManager for the `.wal` file, and dirty pages to the PageManager for the `.db` file. Upon startup, the RecoveryManager reads the `.wal` file and applies necessary redo and undo operations to the BufferPool to ensure crash consistency.
+
 ## 1. Storage & Buffer Management
 - **Disk-Oriented Storage**: Data is stored persistently in binary files (`.db`).
 - **Page Layout**: Fixed 4096-byte pages use a slotted-page architecture. Each page contains a header tracking page ID, slot count, and a free-space pointer.
