@@ -8,6 +8,10 @@
 | 1000 | 855,660 | 25,430 | 33.65x |
 | 10000 | 6,561,560 | 27,060 | 242.48x |
 
+![Latency Comparison](WhatsApp%20Image%202026-06-22%20at%2018.36.26.jpeg)
+
+![Speedup Factor](WhatsApp%20Image%202026-06-22%20at%2018.36.26%20(1).jpeg)
+
 ## 2. MVCC Read Throughput & Non-Blocking Readers
 
 Ran 10 concurrent readers alongside 1 writer (which slept for 200ms).

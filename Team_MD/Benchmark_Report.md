@@ -27,10 +27,10 @@ The goal of this benchmark is to measure the latency gap between a **Sequential 
 | 10,000 | 6,561,560 | 27,060 | **242.48x** |
 
 ### 3.2 Visual Analysis
-![Latency Comparison](benchmarks/latency_comparison.png)
+![Latency Comparison](benchmarks/WhatsApp%20Image%202026-06-22%20at%2018.36.26.jpeg)
 *Figure 1: Exponential growth of Sequential Scan latency versus the near-constant O(log N) latency of the B+ Tree.*
 
-![Speedup Factor](benchmarks/speedup_factor.png)
+![Speedup Factor](benchmarks/WhatsApp%20Image%202026-06-22%20at%2018.36.26%20(1).jpeg)
 *Figure 2: The Speedup Factor scales linearly with data size, reaching over 240x at 10,000 rows.*
 
 ---
