@@ -21,7 +21,7 @@ MiniDB is solving the challenge of understanding complex database internals by b
 |------|-------------|-------|
 | Ayush Kumar Patra | 24bcs10474 | ayush.24bcs10474@sst.scaler.com|
 | Nandani Kumari | 24bcs10317 | nandani.24bcs10317@sst.scaler.com |
-| Vishudh Goyal | 24bcs10446 | vishudh.24bcs10446@sst.scaler.com |
+| Vishudh Goel | 24bcs10162 | vishudh.24bcs10162@sst.scaler.com |
 
 ## System Architecture
 ```mermaid
